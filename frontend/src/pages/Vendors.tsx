@@ -3,7 +3,8 @@ import { api } from "../api";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // phone optional; if present, must be 8–15 digits, optional leading +
-const phoneRegex = /^\+?[0-9]{8,15}$/;
+const phoneRegex = /^\+?[0-9]{10,15}$/;
+
 
 const Vendors: React.FC = () => {
   const [vendors, setVendors] = useState<any[]>([]);

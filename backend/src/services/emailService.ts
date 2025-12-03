@@ -20,29 +20,39 @@ transporter.verify((error, success) => {
   }
 });
 
-export const sendRFPEmail = async (
-  vendorEmail: string,
-  vendorName: string,
-  rfpData: any
-) => {
+export const sendRFPEmail = async (vendor: any, rfp: any) => {
   try {
+    if (!rfp || !rfp.title) {
+      throw new Error('Invalid RFP data passed to sendRFPEmail');
+    }
+
+    const vendorEmail = vendor.email;
+    const vendorName = vendor.name || 'Vendor';
+
     const emailBody = `
 Dear ${vendorName},
 
 We are requesting proposals for the following procurement:
 
-Title: ${rfpData.title}
-Description: ${rfpData.description}
-Budget: $${rfpData.budget.toLocaleString()}
-Delivery Timeline: ${rfpData.deliveryDays} days
-Payment Terms: ${rfpData.paymentTerms}
-Warranty: ${rfpData.warrantyMonths} months
+Title: ${rfp.title}
+Description: ${rfp.description}
+Budget: $${Number(rfp.budget).toLocaleString()}
+Delivery Timeline: ${rfp.deliveryDays} days
+Payment Terms: ${rfp.paymentTerms}
+Warranty: ${rfp.warrantyMonths} months
 
 Items Required:
-${rfpData.items.map((item: any, index: number) => 
-  `${index + 1}. ${item.name} (Qty: ${item.quantity})
-     Specifications: ${item.specifications}`
-).join('\n')}
+${
+  Array.isArray(rfp.items)
+    ? rfp.items
+        .map(
+          (item: any, index: number) =>
+            `${index + 1}. ${item.name} (Qty: ${item.quantity})
+   Specifications: ${item.specifications}`
+        )
+        .join('\n')
+    : 'Details in attached RFP.'
+}
 
 Please reply to this email with your proposal including:
 - Total price
@@ -59,7 +69,7 @@ Procurement Team
     const info = await transporter.sendMail({
       from: `"RFP System" <${process.env.EMAIL_USER}>`,
       to: vendorEmail,
-      subject: `RFP: ${rfpData.title}`,
+      subject: `RFP: ${rfp.title}`,
       text: emailBody,
     });
 
