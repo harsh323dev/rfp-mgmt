@@ -40,18 +40,30 @@ Return ONLY the JSON object, nothing else.
     const response = result.response;
     let text = response.text();
 
-    // Remove markdown code blocks if present
+    console.log('🔍 Raw RFP AI response:', text);
+
+    // Aggressive cleaning: remove any markdown code fences
+    text = text.trim();
     text = text.split('``````').join('').trim();
 
-    // Parse JSON
+    // Extract the JSON object between { and }
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      text = jsonMatch[0];
+    }
+
+    text = text.trim();
+
+    console.log('🔍 Cleaned RFP text:', text);
+
     const rfpData = JSON.parse(text);
 
-    // Validate required fields
+    // Basic validation
     if (!rfpData.title || !rfpData.budget || !rfpData.items) {
       throw new Error('Missing required RFP fields');
     }
 
-    console.log('✅ AI extraction successful');
+    console.log('✅ AI RFP extraction successful');
     return rfpData;
   } catch (error) {
     console.error('Error extracting RFP from text:', error);
@@ -99,23 +111,19 @@ JSON output:
     const response = result.response;
     let text = response.text();
 
-    console.log('🔍 Raw AI response:', text);
+    console.log('🔍 Raw proposal AI response:', text);
 
-    // More aggressive cleaning
     text = text.trim();
-    
-    // Remove markdown code blocks
     text = text.split('``````').join('').trim();
-    
-    // Find JSON object (starts with { and ends with })
+
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       text = jsonMatch[0];
     }
-    
+
     text = text.trim();
 
-    console.log('🔍 Cleaned text:', text);
+    console.log('🔍 Cleaned proposal text:', text);
 
     const proposalData = JSON.parse(text);
 
@@ -140,14 +148,17 @@ RFP Details:
 - Required Warranty: ${rfp.warrantyMonths} months
 
 Vendor Proposals:
-${proposals.map((p, i) => `
+${proposals
+  .map(
+    (p, i) => `
 Proposal ${i + 1}:
 - Vendor: ${p.vendor?.name || p.vendorEmail}
 - Price: $${p.totalPrice}
 - Delivery: ${p.deliveryDays} days
 - Warranty: ${p.warrantyMonths} months
-- Notes: ${p.notes || 'None'}
-`).join('\n')}
+- Notes: ${p.notes || 'None'}`
+  )
+  .join('\n')}
 
 Provide a comprehensive comparison and recommendation in the following JSON format:
 
@@ -186,16 +197,14 @@ Return ONLY the JSON object, nothing else.
 
     console.log('🔍 Raw comparison response:', text);
 
-    // Aggressive cleaning
     text = text.trim();
     text = text.split('``````').join('').trim();
-    
-    // Find JSON object
+
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       text = jsonMatch[0];
     }
-    
+
     text = text.trim();
 
     console.log('🔍 Cleaned comparison text:', text);

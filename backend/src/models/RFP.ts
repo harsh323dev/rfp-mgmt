@@ -4,11 +4,11 @@ export interface IRFP extends Document {
   title: string;
   description: string;
   budget: number;
-  items: Array<{
+  items: {
     name: string;
     quantity: number;
     specifications: string;
-  }>;
+  }[];
   deliveryDays: number;
   paymentTerms: string;
   warrantyMonths: number;
@@ -16,20 +16,23 @@ export interface IRFP extends Document {
   updatedAt: Date;
 }
 
-const RFPItemSchema = new Schema({
-  name: { type: String, required: true },
-  quantity: { type: Number, required: true },
-  specifications: { type: String, required: true },
-});
-
-const RFPSchema = new Schema<IRFP>({
-  title: { type: String, required: true },
-  description: { type: String, required: true },
-  budget: { type: Number, required: true },
-  items: [RFPItemSchema],
-  deliveryDays: { type: Number, required: true, default: 30 },
-  paymentTerms: { type: String, required: true, default: 'Net 30' },
-  warrantyMonths: { type: Number, required: true, default: 12 },
-}, { timestamps: true });
+const RFPSchema = new Schema<IRFP>(
+  {
+    title: { type: String, required: true },
+    description: { type: String, required: true },
+    budget: { type: Number, required: true },
+    items: [
+      {
+        name: { type: String, required: true },
+        quantity: { type: Number, required: true },
+        specifications: { type: String, required: true },
+      },
+    ],
+    deliveryDays: { type: Number, required: true },
+    paymentTerms: { type: String, required: true },
+    warrantyMonths: { type: Number, required: true },
+  },
+  { timestamps: true }
+);
 
 export default mongoose.model<IRFP>('RFP', RFPSchema);

@@ -1,40 +1,37 @@
 import { Request, Response } from 'express';
 import RFP from '../models/RFP';
+import Vendor from '../models/Vendor';
 import { extractRFPFromText } from '../services/aiService';
 import { sendRFPEmail } from '../services/emailService';
-import Vendor from '../models/Vendor';
 
-// Create RFP from natural language
-export const createRFPFromText = async (req: Request, res: Response) => {
+// Create RFP from natural language input
+export const createRFP = async (req: Request, res: Response) => {
   try {
     console.log('📨 Request received at /api/rfps/create');
     console.log('📝 Request body:', req.body);
-    
-    const { text } = req.body;
 
-    if (!text) {
+    const { naturalLanguageInput } = req.body as { naturalLanguageInput?: string };
+
+    if (!naturalLanguageInput || naturalLanguageInput.trim().length === 0) {
       console.log('❌ No text provided');
-      return res.status(400).json({ message: 'Text input is required' });
+      return res.status(400).json({ message: 'No text provided' });
     }
 
-    console.log('🤖 Calling AI service...');
     // Use AI to extract structured RFP data
-    const rfpData = await extractRFPFromText(text);
-    
-    console.log('✅ AI extraction successful:', rfpData);
+    const rfpData = await extractRFPFromText(naturalLanguageInput);
 
-    // Create RFP in database
-    const rfp = await RFP.create(rfpData);
-    
-    console.log('✅ RFP saved to database');
+    // Save RFP to database
+    const rfp: any = await RFP.create(rfpData);
 
-    res.status(201).json({
+    console.log('✅ RFP created:', rfp._id?.toString?.() ?? rfp._id);
+
+    return res.status(201).json({
       message: 'RFP created successfully',
       rfp,
     });
   } catch (error: any) {
     console.error('❌ Error creating RFP:', error);
-    res.status(500).json({ message: 'Failed to create RFP', error: error.message });
+    return res.status(500).json({ message: 'Failed to create RFP', error: error.message });
   }
 };
 
@@ -42,75 +39,63 @@ export const createRFPFromText = async (req: Request, res: Response) => {
 export const getAllRFPs = async (req: Request, res: Response) => {
   try {
     const rfps = await RFP.find().sort({ createdAt: -1 });
-    res.json(rfps);
+    return res.json(rfps);
   } catch (error: any) {
-    res.status(500).json({ message: 'Failed to fetch RFPs', error: error.message });
+    return res.status(500).json({ message: 'Failed to fetch RFPs', error: error.message });
   }
 };
 
-// Get single RFP by ID
-export const getRFPById = async (req: Request, res: Response) => {
-  try {
-    const rfp = await RFP.findById(req.params.id);
-    
-    if (!rfp) {
-      return res.status(404).json({ message: 'RFP not found' });
-    }
-
-    res.json(rfp);
-  } catch (error: any) {
-    res.status(500).json({ message: 'Failed to fetch RFP', error: error.message });
-  }
-};
-
-// Send RFP to selected vendors
+// Send RFP to selected vendors via email
 export const sendRFPToVendors = async (req: Request, res: Response) => {
   try {
-    const { rfpId, vendorIds } = req.body;
+    const { rfpId, vendorIds } = req.body as { rfpId?: string; vendorIds?: string[] };
 
     if (!rfpId || !vendorIds || !Array.isArray(vendorIds) || vendorIds.length === 0) {
-      return res.status(400).json({ message: 'RFP ID and vendor IDs array are required' });
+      return res
+        .status(400)
+        .json({ message: 'RFP ID and at least one vendor ID are required' });
     }
 
-    // Fetch RFP
-    const rfp = await RFP.findById(rfpId);
+    const rfp: any = await RFP.findById(rfpId);
     if (!rfp) {
       return res.status(404).json({ message: 'RFP not found' });
     }
 
-    // Fetch vendors
-    const vendors = await Vendor.find({ _id: { $in: vendorIds } });
+    const vendors: any[] = await Vendor.find({ _id: { $in: vendorIds } });
     if (vendors.length === 0) {
-      return res.status(404).json({ message: 'No vendors found' });
+      return res.status(404).json({ message: 'No valid vendors found for given IDs' });
     }
 
-    // Send emails to all vendors
-    const emailResults = [];
+    console.log(`📤 Sending RFP "${rfp.title}" to ${vendors.length} vendors...`);
+
+    const emailResults: {
+      vendorId: string;
+      email: string;
+      success: boolean;
+      error: string | null;
+    }[] = [];
+
     for (const vendor of vendors) {
-      try {
-        const result = await sendRFPEmail(vendor.email, vendor.name, rfp);
-        emailResults.push({
-          vendor: vendor.name,
-          email: vendor.email,
-          status: 'sent',
-          messageId: result.messageId,
-        });
-      } catch (error: any) {
-        emailResults.push({
-          vendor: vendor.name,
-          email: vendor.email,
-          status: 'failed',
-          error: error.message,
-        });
-      }
+      const result = await (sendRFPEmail as any)(vendor, rfp);
+
+      emailResults.push({
+        vendorId: vendor._id?.toString?.() ?? String(vendor._id),
+        email: vendor.email,
+        success: !!(result && result.success),
+        error: result && result.error ? String(result.error) : null,
+      });
     }
 
-    res.json({
-      message: 'RFP sending process completed',
-      results: emailResults,
+    return res.json({
+      message: 'RFP email sending completed',
+      rfpId: rfp._id?.toString?.() ?? String(rfp._id),
+      vendorCount: vendors.length,
+      emailResults,
     });
   } catch (error: any) {
-    console.error('Error sending RFP:', error);
-    res.status(500).json({ message: 'Failed to send RFP', error: error.message });
+    console.error('❌ Error sending RFP:', error);
+    return res
+      .status(500)
+      .json({ message: 'Failed to send RFP', error: error.message });
   }
 };
