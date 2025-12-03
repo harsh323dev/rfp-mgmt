@@ -1,5 +1,5 @@
 import express from 'express';
-import { createRFPFromText, getAllRFPs, getRFPById } from '../controllers/rfpController';
+import { createRFPFromText, getAllRFPs, getRFPById, sendRFPToVendors } from '../controllers/rfpController';
 
 const router = express.Router();
 
@@ -13,6 +13,6 @@ router.use((req, res, next) => {
 router.post('/create', createRFPFromText);
 router.get('/', getAllRFPs);
 router.get('/:id', getRFPById);
+router.post('/send', sendRFPToVendors);
 
 export default router;
-    

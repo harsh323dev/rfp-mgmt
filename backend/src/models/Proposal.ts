@@ -1,8 +1,8 @@
 import mongoose, { Document, Schema } from 'mongoose';
 
 export interface IProposal extends Document {
-  rfpId: mongoose.Types.ObjectId;
-  vendorId: mongoose.Types.ObjectId;
+  rfp: mongoose.Types.ObjectId;
+  vendor: mongoose.Types.ObjectId;
   totalPrice: number;
   deliveryDays: number;
   warrantyMonths: number;
@@ -22,8 +22,8 @@ const ProposalItemSchema = new Schema({
 });
 
 const ProposalSchema = new Schema<IProposal>({
-  rfpId: { type: Schema.Types.ObjectId, ref: 'RFP', required: true },
-  vendorId: { type: Schema.Types.ObjectId, ref: 'Vendor', required: true },
+  rfp: { type: Schema.Types.ObjectId, ref: 'RFP', required: true },
+  vendor: { type: Schema.Types.ObjectId, ref: 'Vendor', required: true },
   totalPrice: { type: Number, required: true },
   deliveryDays: { type: Number, required: true },
   warrantyMonths: { type: Number, required: true },

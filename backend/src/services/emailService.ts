@@ -1,0 +1,72 @@
+import nodemailer from 'nodemailer';
+
+// Create reusable transporter
+const transporter = nodemailer.createTransport({
+  host: 'smtp.gmail.com',
+  port: 465,
+  secure: true, // use SSL
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS,
+  },
+});
+
+// Verify transporter configuration
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('❌ Email transporter error:', error);
+  } else {
+    console.log('✅ Email service ready');
+  }
+});
+
+export const sendRFPEmail = async (
+  vendorEmail: string,
+  vendorName: string,
+  rfpData: any
+) => {
+  try {
+    const emailBody = `
+Dear ${vendorName},
+
+We are requesting proposals for the following procurement:
+
+Title: ${rfpData.title}
+Description: ${rfpData.description}
+Budget: $${rfpData.budget.toLocaleString()}
+Delivery Timeline: ${rfpData.deliveryDays} days
+Payment Terms: ${rfpData.paymentTerms}
+Warranty: ${rfpData.warrantyMonths} months
+
+Items Required:
+${rfpData.items.map((item: any, index: number) => 
+  `${index + 1}. ${item.name} (Qty: ${item.quantity})
+     Specifications: ${item.specifications}`
+).join('\n')}
+
+Please reply to this email with your proposal including:
+- Total price
+- Delivery timeline
+- Warranty terms
+- Any additional notes
+
+We look forward to your response.
+
+Best regards,
+Procurement Team
+`;
+
+    const info = await transporter.sendMail({
+      from: `"RFP System" <${process.env.EMAIL_USER}>`,
+      to: vendorEmail,
+      subject: `RFP: ${rfpData.title}`,
+      text: emailBody,
+    });
+
+    console.log('✅ Email sent:', info.messageId);
+    return { success: true, messageId: info.messageId };
+  } catch (error: any) {
+    console.error('❌ Error sending email:', error);
+    throw new Error(`Failed to send email: ${error.message}`);
+  }
+};

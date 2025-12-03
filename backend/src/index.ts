@@ -6,6 +6,7 @@ import cors from 'cors';
 import connectDB from './config/database';
 import rfpRoutes from './routes/rfpRoutes';
 import vendorRoutes from './routes/vendorRoutes';
+import proposalRoutes from './routes/proposalRoutes';
 
 // Initialize Express app
 const app = express();
@@ -39,6 +40,7 @@ app.get('/health', (req: Request, res: Response) => {
 // API Routes - MUST BE BEFORE app.listen()!
 app.use('/api/rfps', rfpRoutes);
 app.use('/api/vendors', vendorRoutes);
+app.use('/api/proposals', proposalRoutes);
 
 // Start server - MUST BE LAST!
 app.listen(PORT, () => {
