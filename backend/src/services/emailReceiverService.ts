@@ -1,6 +1,5 @@
 import Imap from 'imap';
 import { simpleParser, ParsedMail } from 'mailparser';
-import { extractProposalFromEmail } from './aiService';
 import Proposal from '../models/Proposal';
 import Vendor from '../models/Vendor';
 import RFP from '../models/RFP';
@@ -14,13 +13,40 @@ const imapConfig = {
   tlsOptions: { rejectUnauthorized: false },
 };
 
+// Simple local extractor (no AI) for proposals from email
+function extractProposalFromEmail(
+  emailBody: string,
+  fromEmail: string,
+  subject: string
+) {
+  const text = `${subject}\n${emailBody}`;
+
+  const priceMatch = text.match(/(\d+[.,]?\d*)\s*(USD|INR|Rs|rs|\$)/i);
+  const daysMatch = text.match(/(\d+)\s*(days?|day)/i);
+  const warrantyMatch = text.match(/(\d+)\s*(months?|month)/i);
+
+  const totalPrice = priceMatch
+    ? Number(String(priceMatch[1]).replace(/,/g, ''))
+    : 0;
+  const deliveryDays = daysMatch ? Number(daysMatch[1]) : 0;
+  const warrantyMonths = warrantyMatch ? Number(warrantyMatch[1]) : 0;
+
+  return {
+    vendorEmail: fromEmail,
+    totalPrice,
+    deliveryDays,
+    warrantyMonths,
+    notes: text.slice(0, 500),
+  };
+}
+
 export const checkForVendorResponses = async (): Promise<any[]> => {
   return new Promise((resolve, reject) => {
     const imap = new Imap(imapConfig);
 
     imap.once('ready', () => {
       console.log('📬 IMAP connected, checking inbox...');
-      
+
       imap.openBox('INBOX', false, (err: Error, box: any) => {
         if (err) {
           console.error('❌ Error opening inbox:', err);
@@ -60,31 +86,29 @@ export const checkForVendorResponses = async (): Promise<any[]> => {
                 try {
                   const fromText = parsed.from?.text || 'Unknown';
                   const subject = parsed.subject || 'No Subject';
-                  
+
                   console.log(`📧 Processing email from: ${fromText}`);
                   console.log(`📧 Subject: ${subject}`);
 
                   const emailBody = parsed.text || '';
                   const fromEmail = parsed.from?.value?.[0]?.address || '';
 
-                  // Use AI to extract proposal details
-                  const proposalData = await extractProposalFromEmail(
+                  const proposalData = extractProposalFromEmail(
                     emailBody,
                     fromEmail,
                     subject
                   );
 
                   if (proposalData) {
-                    // Find vendor by email
-                    const vendor = await Vendor.findOne({ email: proposalData.vendorEmail });
-                    
+                    const vendor = await Vendor.findOne({
+                      email: proposalData.vendorEmail,
+                    });
+
                     if (vendor) {
-                      // Extract RFP title from subject (format: "Re: RFP: Office Chair Procurement")
                       const rfpTitle = subject.replace(/^Re:\s*RFP:\s*/i, '').trim();
                       const rfp = await RFP.findOne({ title: rfpTitle });
-                      
+
                       if (rfp) {
-                        // Save proposal to database
                         const proposalDoc = await Proposal.create({
                           rfp: rfp._id,
                           vendor: vendor._id,
@@ -93,7 +117,7 @@ export const checkForVendorResponses = async (): Promise<any[]> => {
                           warrantyMonths: proposalData.warrantyMonths,
                           notes: proposalData.notes,
                         });
-                        
+
                         proposals.push(proposalDoc);
                         console.log('✅ Proposal saved to database');
                       } else {
@@ -101,7 +125,10 @@ export const checkForVendorResponses = async (): Promise<any[]> => {
                         proposals.push(proposalData);
                       }
                     } else {
-                      console.log('⚠️ Vendor not found for email:', proposalData.vendorEmail);
+                      console.log(
+                        '⚠️ Vendor not found for email:',
+                        proposalData.vendorEmail
+                      );
                       proposals.push(proposalData);
                     }
                   }

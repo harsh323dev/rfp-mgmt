@@ -17,7 +17,7 @@ export const api = {
   receiveProposals: () => axios.post(`${API_URL}/proposals/receive`),
   getAllProposals: () => axios.get(`${API_URL}/proposals`),
 
-  // Compare proposals with AI (FIXED: POST to /rfps/:id/compare)
+  // Compare proposals with AI (OpenAI)
   compareProposals: (rfpId: string) =>
     axios.post(`${API_URL}/rfps/${rfpId}/compare`),
 };

@@ -1,220 +1,187 @@
-import { model } from '../config/gemini';
+import axios from 'axios';
+import OpenAI from 'openai';
 
-// Extract RFP data from natural language
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GEMINI_URL =
+  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// ----------------- Gemini helper (Create RFP) -----------------
+
+async function callGemini(prompt: string) {
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY is not set');
+  }
+
+  const res = await axios.post(
+    `${GEMINI_URL}?key=${GEMINI_API_KEY}`,
+    {
+      contents: [
+        {
+          parts: [{ text: prompt }],
+        },
+      ],
+    },
+    {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  const data: any = res.data;
+
+  const text =
+    data &&
+    data.candidates &&
+    data.candidates[0] &&
+    data.candidates[0].content &&
+    data.candidates[0].content.parts &&
+    data.candidates[0].content.parts[0] &&
+    typeof data.candidates[0].content.parts[0].text === 'string'
+      ? data.candidates[0].content.parts[0].text
+      : data &&
+        data.candidates &&
+        data.candidates[0] &&
+        typeof data.candidates[0].output_text === 'string'
+      ? data.candidates[0].output_text
+      : '';
+
+  if (!text) {
+    throw new Error('Empty response from Gemini');
+  }
+
+  return text;
+}
+
+// ---------- RFP extraction with Gemini ----------
+
 export const extractRFPFromText = async (naturalLanguageInput: string) => {
-  try {
-    const prompt = `
-You are an AI assistant that converts natural language procurement requests into structured RFP (Request for Proposal) data.
+  const prompt = `
+You are an assistant that extracts structured RFP data from unstructured text.
 
-Extract the following information from the user's input and return ONLY valid JSON (no markdown, no code blocks, no extra text):
+Input:
+${naturalLanguageInput}
 
+Return ONLY valid JSON with this shape:
 {
-  "title": "Brief title for the RFP",
-  "description": "Detailed description of what is being procured",
-  "budget": number,
+  "title": "short title",
+  "description": "clean summary",
+  "budget": 0,
+  "deliveryDays": 0,
+  "warrantyMonths": 0,
+  "paymentTerms": "string",
   "items": [
     {
-      "name": "Item name",
-      "quantity": number,
-      "specifications": "Technical specifications or requirements"
+      "name": "item name",
+      "quantity": 1,
+      "unit": "unit"
     }
-  ],
-  "deliveryDays": number,
-  "paymentTerms": "string (e.g., 'Net 30', 'Advance payment', etc.)",
-  "warrantyMonths": number
+  ]
 }
-
-Rules:
-- Extract all numerical values as numbers (not strings)
-- If multiple items are mentioned, create separate objects in the items array
-- If information is missing, use reasonable defaults
-- deliveryDays should be a number (convert "2 weeks" to 14, "1 month" to 30, etc.)
-- warrantyMonths should be in months (convert "1 year" to 12, "2 years" to 24, etc.)
-
-User Input: ${naturalLanguageInput}
-
-Return ONLY the JSON object, nothing else.
 `;
 
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    let text = response.text();
+  const text = await callGemini(prompt);
 
-    console.log('🔍 Raw RFP AI response:', text);
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonString = jsonMatch ? jsonMatch[0] : text;
 
-    // Aggressive cleaning: remove any markdown code fences
-    text = text.trim();
-    text = text.split('``````').join('').trim();
+  const parsed = JSON.parse(jsonString);
 
-    // Extract the JSON object between { and }
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      text = jsonMatch[0];
-    }
-
-    text = text.trim();
-
-    console.log('🔍 Cleaned RFP text:', text);
-
-    const rfpData = JSON.parse(text);
-
-    // Basic validation
-    if (!rfpData.title || !rfpData.budget || !rfpData.items) {
-      throw new Error('Missing required RFP fields');
-    }
-
-    console.log('✅ AI RFP extraction successful');
-    return rfpData;
-  } catch (error) {
-    console.error('Error extracting RFP from text:', error);
-    throw new Error('Failed to extract RFP data from natural language');
-  }
+  return parsed;
 };
 
-// Extract proposal data from vendor email response
-export const extractProposalFromEmail = async (
-  emailBody: string,
-  vendorEmail: string,
-  subject: string
-): Promise<any> => {
-  try {
-    const prompt = `
-You are an AI assistant that extracts structured proposal data from vendor email responses.
+// ---------- Proposal comparison with OpenAI ----------
 
-Extract the following information from the vendor's email and return ONLY valid JSON (no markdown, no extra text):
+export const compareProposals = async (rfp: any, proposalsInput: any[]) => {
+  const proposals = Array.isArray(proposalsInput)
+    ? proposalsInput
+    : [proposalsInput];
 
-{
-  "vendorEmail": "${vendorEmail}",
-  "totalPrice": number,
-  "deliveryDays": number,
-  "warrantyMonths": number,
-  "notes": "string (any additional notes or terms from vendor)"
-}
-
-Rules:
-- Extract the total price (convert to number, remove currency symbols like $, ₹, etc.)
-- Extract delivery timeline in days (convert weeks/months to days)
-- Extract warranty period in months (convert years to months)
-- Include any important additional notes or special terms
-- If information is missing, use null for that field
-- IMPORTANT: Return ONLY the JSON object. No markdown, no code blocks, no backticks.
-
-Email Subject: ${subject}
-
-Email Body:
-${emailBody}
-
-JSON output:
-`;
-
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    let text = response.text();
-
-    console.log('🔍 Raw proposal AI response:', text);
-
-    text = text.trim();
-    text = text.split('``````').join('').trim();
-
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      text = jsonMatch[0];
-    }
-
-    text = text.trim();
-
-    console.log('🔍 Cleaned proposal text:', text);
-
-    const proposalData = JSON.parse(text);
-
-    console.log('✅ AI proposal extraction successful');
-    return proposalData;
-  } catch (error) {
-    console.error('Error extracting proposal from email:', error);
-    throw new Error('Failed to extract proposal data from email');
+  if (!proposals.length) {
+    throw new Error('No proposals passed to compareProposals');
   }
-};
 
-// Compare proposals and generate AI recommendation
-export const compareProposals = async (rfp: any, proposals: any[]): Promise<any> => {
-  try {
-    const prompt = `
-You are an AI assistant that compares vendor proposals and provides recommendations.
+  const proposalSummaries = proposals.map((p: any) => ({
+    vendorName: p.vendor?.name ?? 'Unknown Vendor',
+    totalPrice: p.totalPrice,
+    deliveryDays: p.deliveryDays,
+    warrantyMonths: p.warrantyMonths,
+    notes: p.notes ?? '',
+  }));
 
-RFP Details:
-- Title: ${rfp.title}
-- Budget: $${rfp.budget}
-- Required Delivery: ${rfp.deliveryDays} days
-- Required Warranty: ${rfp.warrantyMonths} months
+  const userPrompt = `
+You are an expert procurement analyst.
 
-Vendor Proposals:
-${proposals
-  .map(
-    (p, i) => `
-Proposal ${i + 1}:
-- Vendor: ${p.vendor?.name || p.vendorEmail}
-- Price: $${p.totalPrice}
-- Delivery: ${p.deliveryDays} days
-- Warranty: ${p.warrantyMonths} months
-- Notes: ${p.notes || 'None'}`
-  )
-  .join('\n')}
+RFP:
+Title: ${rfp.title}
+Description: ${rfp.description}
+Budget: ${rfp.budget}
+DeliveryDays: ${rfp.deliveryDays}
+WarrantyMonths: ${rfp.warrantyMonths}
+PaymentTerms: ${rfp.paymentTerms}
 
-Provide a comprehensive comparison and recommendation in the following JSON format:
+Proposals (JSON array):
+${JSON.stringify(proposalSummaries, null, 2)}
 
+Compare the proposals and respond ONLY as valid JSON in this structure:
 {
-  "summary": "Brief overview of all proposals",
-  "scores": [
+  "proposals": [
     {
-      "vendorName": "Vendor name",
-      "priceScore": number (0-100),
-      "deliveryScore": number (0-100),
-      "warrantyScore": number (0-100),
-      "totalScore": number (0-100)
+      "vendorName": "string",
+      "totalPrice": number,
+      "deliveryDays": number,
+      "warrantyMonths": number,
+      "scores": {
+        "priceScore": number,
+        "deliveryScore": number,
+        "warrantyScore": number
+      },
+      "totalScore": number,
+      "summary": "short explanation"
     }
   ],
   "recommendation": {
-    "bestVendor": "Vendor name",
-    "reason": "Detailed explanation of why this vendor is recommended"
+    "vendorName": "string",
+    "reason": "why this vendor is recommended"
   },
   "considerations": [
-    "Important point 1",
-    "Important point 2"
+    "short bullet point about duplicates, trade-offs, or remarks"
   ]
 }
-
-Scoring criteria:
-- Price: Lower is better (within budget gets higher score)
-- Delivery: Faster is better (meeting or beating required delivery)
-- Warranty: Longer is better (meeting or exceeding required warranty)
-
-Return ONLY the JSON object, nothing else.
+Return JSON only, no extra text.
 `;
 
-    const result = await model.generateContent(prompt);
-    const response = result.response;
-    let text = response.text();
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a strict JSON generator. Always return exactly the JSON schema requested by the user.',
+        },
+        { role: 'user', content: userPrompt },
+      ],
+      temperature: 0.2,
+    });
 
-    console.log('🔍 Raw comparison response:', text);
+    const raw = completion.choices[0]?.message?.content ?? '';
+    const jsonMatch = raw.match(/\{[\s\S]*\}$/);
+    const jsonString = jsonMatch ? jsonMatch[0] : raw;
 
-    text = text.trim();
-    text = text.split('``````').join('').trim();
+    const parsed = JSON.parse(jsonString);
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      text = jsonMatch[0];
+    if (!Array.isArray(parsed.proposals)) {
+      throw new Error('AI response missing proposals array');
     }
 
-    text = text.trim();
-
-    console.log('🔍 Cleaned comparison text:', text);
-
-    const comparison = JSON.parse(text);
-
-    console.log('✅ AI comparison successful');
-    return comparison;
-  } catch (error) {
-    console.error('Error comparing proposals:', error);
+    return parsed;
+  } catch (error: any) {
+    console.error('OpenAI compare error:', error);
     throw new Error('Failed to compare proposals');
   }
 };

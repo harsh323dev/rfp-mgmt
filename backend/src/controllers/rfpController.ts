@@ -5,7 +5,7 @@ import Proposal from '../models/Proposal';
 import { extractRFPFromText, compareProposals } from '../services/aiService';
 import { sendRFPEmail } from '../services/emailService';
 
-// Create RFP from natural language input (using AI)
+// Create RFP from natural language input (using Gemini)
 export const createRFP = async (req: Request, res: Response) => {
   try {
     console.log('📨 Request received at /api/rfps/create');
@@ -20,10 +20,8 @@ export const createRFP = async (req: Request, res: Response) => {
       return res.status(400).json({ message: 'No text provided' });
     }
 
-    // Use AI to extract structured RFP data
     const rfpData = await extractRFPFromText(naturalLanguageInput);
 
-    // Save RFP to database
     const rfp: any = await RFP.create(rfpData);
 
     console.log('✅ RFP created:', rfp._id?.toString?.() ?? rfp._id);
@@ -113,7 +111,7 @@ export const sendRFPToVendors = async (req: Request, res: Response) => {
   }
 };
 
-// Compare proposals for a given RFP using AI
+// Compare proposals for a given RFP using OpenAI
 export const compareProposalsWithAI = async (req: Request, res: Response) => {
   try {
     const rfpId = req.params.id;
@@ -125,14 +123,16 @@ export const compareProposalsWithAI = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'RFP not found' });
     }
 
-    const proposals: any[] = await Proposal.find({ rfp: rfpId }).populate('vendor');
+    const proposals: any[] = await Proposal.find({ rfp: rfpId }).populate(
+      'vendor'
+    );
     if (!proposals || proposals.length === 0) {
       return res
         .status(400)
         .json({ message: 'No proposals to compare for this RFP' });
     }
 
-    console.log(`📊 Found ${proposals.length} proposals, calling AI...`);
+    console.log(`📊 Found ${proposals.length} proposals, calling OpenAI...`);
 
     const comparison = await compareProposals(rfp, proposals);
 

@@ -3,12 +3,12 @@ import {
   createRFP,
   getAllRFPs,
   sendRFPToVendors,
-  compareProposalsWithAI,   // <-- make sure this is exported from rfpController.ts
+  compareProposalsWithAI,
 } from '../controllers/rfpController';
 
 const router = express.Router();
 
-// Add middleware to log all requests to this router
+// Log all requests hitting this router
 router.use((req, res, next) => {
   console.log(`🔵 Route hit: ${req.method} ${req.originalUrl}`);
   console.log('🔵 Body:', req.body);
@@ -24,7 +24,7 @@ router.get('/', getAllRFPs);
 // Send RFP emails to vendors
 router.post('/send', sendRFPToVendors);
 
-// NEW: Compare proposals for a given RFP with AI
+// Compare proposals for a given RFP with OpenAI
 router.post('/:id/compare', compareProposalsWithAI);
 
 export default router;
