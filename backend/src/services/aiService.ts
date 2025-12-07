@@ -136,7 +136,7 @@ JSON output:
 };
 
 // Compare proposals and generate AI recommendation
-export const compareProposals = async (proposals: any[], rfp: any): Promise<any> => {
+export const compareProposals = async (rfp: any, proposals: any[]): Promise<any> => {
   try {
     const prompt = `
 You are an AI assistant that compares vendor proposals and provides recommendations.

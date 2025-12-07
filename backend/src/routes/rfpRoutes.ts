@@ -3,6 +3,7 @@ import {
   createRFP,
   getAllRFPs,
   sendRFPToVendors,
+  compareProposalsWithAI,   // <-- make sure this is exported from rfpController.ts
 } from '../controllers/rfpController';
 
 const router = express.Router();
@@ -14,8 +15,16 @@ router.use((req, res, next) => {
   next();
 });
 
+// Create RFP with or without AI
 router.post('/create', createRFP);
+
+// List all RFPs
 router.get('/', getAllRFPs);
+
+// Send RFP emails to vendors
 router.post('/send', sendRFPToVendors);
+
+// NEW: Compare proposals for a given RFP with AI
+router.post('/:id/compare', compareProposalsWithAI);
 
 export default router;

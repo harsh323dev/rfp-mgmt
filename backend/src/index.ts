@@ -8,6 +8,15 @@ import rfpRoutes from './routes/rfpRoutes';
 import vendorRoutes from './routes/vendorRoutes';
 import proposalRoutes from './routes/proposalRoutes';
 
+// Global crash handlers – add these
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+});
+
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 5000;

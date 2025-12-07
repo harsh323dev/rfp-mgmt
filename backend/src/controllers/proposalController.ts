@@ -71,7 +71,8 @@ export const compareRFPProposals = async (req: Request, res: Response) => {
     console.log(`🤖 Comparing ${proposals.length} proposals using AI...`);
 
     // Use AI to compare proposals
-    const comparison = await compareProposals(proposals, rfp);
+    const comparison = await compareProposals(rfp, proposals);
+
 
     res.json({
       message: 'Proposal comparison completed',

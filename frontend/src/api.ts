@@ -6,7 +6,7 @@ export const api = {
   // RFP endpoints
   createRFP: (data: any) => axios.post(`${API_URL}/rfps/create`, data),
   getAllRFPs: () => axios.get(`${API_URL}/rfps`),
-  sendRFP: (rfpId: string, vendorIds: string[]) => 
+  sendRFP: (rfpId: string, vendorIds: string[]) =>
     axios.post(`${API_URL}/rfps/send`, { rfpId, vendorIds }),
 
   // Vendor endpoints
@@ -16,5 +16,8 @@ export const api = {
   // Proposal endpoints
   receiveProposals: () => axios.post(`${API_URL}/proposals/receive`),
   getAllProposals: () => axios.get(`${API_URL}/proposals`),
-  compareProposals: (rfpId: string) => axios.get(`${API_URL}/proposals/compare/${rfpId}`),
+
+  // Compare proposals with AI (FIXED: POST to /rfps/:id/compare)
+  compareProposals: (rfpId: string) =>
+    axios.post(`${API_URL}/rfps/${rfpId}/compare`),
 };
