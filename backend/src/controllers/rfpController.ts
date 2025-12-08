@@ -5,15 +5,13 @@ import Proposal from '../models/Proposal';
 import { extractRFPFromText, compareProposals } from '../services/aiService';
 import { sendRFPEmail } from '../services/emailService';
 
-// Create RFP from natural language input (using Gemini)
+// Create RFP from natural language input (Gemini)
 export const createRFP = async (req: Request, res: Response) => {
   try {
     console.log('📨 Request received at /api/rfps/create');
     console.log('📝 Request body:', req.body);
 
-    const { naturalLanguageInput } = req.body as {
-      naturalLanguageInput?: string;
-    };
+    const { naturalLanguageInput } = req.body as { naturalLanguageInput?: string };
 
     if (!naturalLanguageInput || naturalLanguageInput.trim().length === 0) {
       console.log('❌ No text provided');
@@ -21,7 +19,6 @@ export const createRFP = async (req: Request, res: Response) => {
     }
 
     const rfpData = await extractRFPFromText(naturalLanguageInput);
-
     const rfp: any = await RFP.create(rfpData);
 
     console.log('✅ RFP created:', rfp._id?.toString?.() ?? rfp._id);
@@ -54,15 +51,12 @@ export const getAllRFPs = async (req: Request, res: Response) => {
 // Send RFP to selected vendors via email
 export const sendRFPToVendors = async (req: Request, res: Response) => {
   try {
-    const { rfpId, vendorIds } = req.body as {
-      rfpId?: string;
-      vendorIds?: string[];
-    };
+    const { rfpId, vendorIds } = req.body as { rfpId?: string; vendorIds?: string[] };
 
     if (!rfpId || !vendorIds || !Array.isArray(vendorIds) || vendorIds.length === 0) {
-      return res.status(400).json({
-        message: 'RFP ID and at least one vendor ID are required',
-      });
+      return res
+        .status(400)
+        .json({ message: 'RFP ID and at least one vendor ID are required' });
     }
 
     const rfp: any = await RFP.findById(rfpId);
@@ -72,9 +66,7 @@ export const sendRFPToVendors = async (req: Request, res: Response) => {
 
     const vendors: any[] = await Vendor.find({ _id: { $in: vendorIds } });
     if (vendors.length === 0) {
-      return res
-        .status(404)
-        .json({ message: 'No valid vendors found for given IDs' });
+      return res.status(404).json({ message: 'No valid vendors found for given IDs' });
     }
 
     console.log(`📤 Sending RFP "${rfp.title}" to ${vendors.length} vendors...`);
@@ -111,7 +103,42 @@ export const sendRFPToVendors = async (req: Request, res: Response) => {
   }
 };
 
-// Compare proposals for a given RFP using OpenAI
+// Compare proposals for a given RFP using Gemini
+/* 
+export const compareProposalsWithAI = async (req: Request, res: Response) => {
+  try {
+    const rfpId = req.params.id;
+
+    console.log(`🔍 Comparing proposals for RFP: ${rfpId}`);
+
+    const rfp: any = await RFP.findById(rfpId);
+    if (!rfp) {
+      return res.status(404).json({ message: 'RFP not found' });
+    }
+
+    const proposals: any[] = await Proposal.find({ rfp: rfpId }).populate('vendor');
+    if (!proposals || proposals.length === 0) {
+      return res
+        .status(400)
+        .json({ message: 'No proposals to compare for this RFP' });
+    }
+
+    console.log(`📊 Found ${proposals.length} proposals, calling Gemini...`);
+
+    const comparison = await compareProposals(rfp, proposals);
+
+    console.log('✅ Comparison complete');
+
+    return res.json(comparison);
+  } catch (error: any) {
+    console.error('❌ Error comparing proposals:', error);
+    return res.status(500).json({
+      message: 'Failed to compare proposals',
+      error: error.message,
+    });
+  }
+};  */
+
 export const compareProposalsWithAI = async (req: Request, res: Response) => {
   try {
     const rfpId = req.params.id;
@@ -132,7 +159,7 @@ export const compareProposalsWithAI = async (req: Request, res: Response) => {
         .json({ message: 'No proposals to compare for this RFP' });
     }
 
-    console.log(`📊 Found ${proposals.length} proposals, calling OpenAI...`);
+    console.log(`📊 Found ${proposals.length} proposals, running math comparison...`);
 
     const comparison = await compareProposals(rfp, proposals);
 

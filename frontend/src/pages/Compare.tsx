@@ -1,10 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 
+type RFP = {
+  _id: string;
+  title: string;
+};
+
+type ScoreRow = {
+  vendorName: string;
+  priceScore: number;
+  deliveryScore: number;
+  warrantyScore: number;
+  totalScore: number;
+};
+
+type ComparisonResult = {
+  summary: string;
+  scores: ScoreRow[];
+  recommendation: {
+    bestVendor: string;
+    reason: string;
+  };
+  considerations: string[];
+};
+
 const Compare: React.FC = () => {
-  const [rfps, setRfps] = useState<any[]>([]);
+  const [rfps, setRfps] = useState<RFP[]>([]);
   const [selectedRFP, setSelectedRFP] = useState('');
-  const [comparison, setComparison] = useState<any>(null);
+  const [comparison, setComparison] = useState<ComparisonResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -29,8 +52,10 @@ const Compare: React.FC = () => {
     setComparison(null);
 
     try {
+      // backend now returns the comparison object directly
       const response = await api.compareProposals(selectedRFP);
-      setComparison(response.data.comparison);
+      const data: ComparisonResult = response.data;
+      setComparison(data);
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to compare proposals');
     } finally {
@@ -82,11 +107,13 @@ const Compare: React.FC = () => {
 
         {comparison && (
           <div className="mt-4">
+            {/* Summary card */}
             <div className="card">
               <h3 className="font-bold mb-2">📊 Summary</h3>
               <p style={{ color: 'var(--slate-700)' }}>{comparison.summary}</p>
             </div>
 
+            {/* Vendor scores table */}
             <div className="card mt-4">
               <h3 className="font-bold mb-4">🏆 Vendor Scores</h3>
               <div className="table-container">
@@ -101,9 +128,11 @@ const Compare: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {comparison.scores.map((score: any, index: number) => (
+                    {comparison.scores.map((score, index) => (
                       <tr key={index}>
-                        <td><strong>{score.vendorName}</strong></td>
+                        <td>
+                          <strong>{score.vendorName}</strong>
+                        </td>
                         <td>{score.priceScore}/100</td>
                         <td>{score.deliveryScore}/100</td>
                         <td>{score.warrantyScore}/100</td>
@@ -119,18 +148,31 @@ const Compare: React.FC = () => {
               </div>
             </div>
 
-            <div className="card mt-4" style={{ background: 'linear-gradient(135deg, var(--primary-50), var(--accent-50))' }}>
+            {/* Recommendation card */}
+            <div
+              className="card mt-4"
+              style={{
+                background:
+                  'linear-gradient(135deg, var(--primary-50), var(--accent-50))',
+              }}
+            >
               <h3 className="font-bold mb-2">✨ AI Recommendation</h3>
-              <p className="text-xl font-bold mb-2" style={{ color: 'var(--primary-700)' }}>
+              <p
+                className="text-xl font-bold mb-2"
+                style={{ color: 'var(--primary-700)' }}
+              >
                 {comparison.recommendation.bestVendor}
               </p>
-              <p style={{ color: 'var(--slate-700)' }}>{comparison.recommendation.reason}</p>
+              <p style={{ color: 'var(--slate-700)' }}>
+                {comparison.recommendation.reason}
+              </p>
             </div>
 
+            {/* Considerations card */}
             <div className="card mt-4">
               <h3 className="font-bold mb-2">⚠️ Considerations</h3>
               <ul style={{ lineHeight: '2', color: 'var(--slate-700)' }}>
-                {comparison.considerations.map((item: string, index: number) => (
+                {comparison.considerations.map((item, index) => (
                   <li key={index}>• {item}</li>
                 ))}
               </ul>

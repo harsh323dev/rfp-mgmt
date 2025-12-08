@@ -1,187 +1,285 @@
-import axios from 'axios';
-import OpenAI from 'openai';
+import { model } from '../config/gemini';
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent';
+// ---------------- RFP extraction with Gemini ----------------
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+export const extractRFPFromText = async (
+  naturalLanguageInput: string
+): Promise<any> => {
+  try {
+    const prompt = `
+You are an AI assistant that converts natural language procurement requests into structured RFP (Request for Proposal) data.
 
-// ----------------- Gemini helper (Create RFP) -----------------
+Extract the following information from the user's input and return ONLY valid JSON (no markdown, no code blocks, no extra text):
 
-async function callGemini(prompt: string) {
-  if (!GEMINI_API_KEY) {
-    throw new Error('GEMINI_API_KEY is not set');
-  }
-
-  const res = await axios.post(
-    `${GEMINI_URL}?key=${GEMINI_API_KEY}`,
-    {
-      contents: [
-        {
-          parts: [{ text: prompt }],
-        },
-      ],
-    },
-    {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    }
-  );
-
-  const data: any = res.data;
-
-  const text =
-    data &&
-    data.candidates &&
-    data.candidates[0] &&
-    data.candidates[0].content &&
-    data.candidates[0].content.parts &&
-    data.candidates[0].content.parts[0] &&
-    typeof data.candidates[0].content.parts[0].text === 'string'
-      ? data.candidates[0].content.parts[0].text
-      : data &&
-        data.candidates &&
-        data.candidates[0] &&
-        typeof data.candidates[0].output_text === 'string'
-      ? data.candidates[0].output_text
-      : '';
-
-  if (!text) {
-    throw new Error('Empty response from Gemini');
-  }
-
-  return text;
-}
-
-// ---------- RFP extraction with Gemini ----------
-
-export const extractRFPFromText = async (naturalLanguageInput: string) => {
-  const prompt = `
-You are an assistant that extracts structured RFP data from unstructured text.
-
-Input:
-${naturalLanguageInput}
-
-Return ONLY valid JSON with this shape:
 {
-  "title": "short title",
-  "description": "clean summary",
-  "budget": 0,
-  "deliveryDays": 0,
-  "warrantyMonths": 0,
-  "paymentTerms": "string",
+  "title": "Brief title for the RFP",
+  "description": "Detailed description of what is being procured",
+  "budget": number,
   "items": [
     {
-      "name": "item name",
-      "quantity": 1,
-      "unit": "unit"
-    }
-  ]
-}
-`;
-
-  const text = await callGemini(prompt);
-
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  const jsonString = jsonMatch ? jsonMatch[0] : text;
-
-  const parsed = JSON.parse(jsonString);
-
-  return parsed;
-};
-
-// ---------- Proposal comparison with OpenAI ----------
-
-export const compareProposals = async (rfp: any, proposalsInput: any[]) => {
-  const proposals = Array.isArray(proposalsInput)
-    ? proposalsInput
-    : [proposalsInput];
-
-  if (!proposals.length) {
-    throw new Error('No proposals passed to compareProposals');
-  }
-
-  const proposalSummaries = proposals.map((p: any) => ({
-    vendorName: p.vendor?.name ?? 'Unknown Vendor',
-    totalPrice: p.totalPrice,
-    deliveryDays: p.deliveryDays,
-    warrantyMonths: p.warrantyMonths,
-    notes: p.notes ?? '',
-  }));
-
-  const userPrompt = `
-You are an expert procurement analyst.
-
-RFP:
-Title: ${rfp.title}
-Description: ${rfp.description}
-Budget: ${rfp.budget}
-DeliveryDays: ${rfp.deliveryDays}
-WarrantyMonths: ${rfp.warrantyMonths}
-PaymentTerms: ${rfp.paymentTerms}
-
-Proposals (JSON array):
-${JSON.stringify(proposalSummaries, null, 2)}
-
-Compare the proposals and respond ONLY as valid JSON in this structure:
-{
-  "proposals": [
-    {
-      "vendorName": "string",
-      "totalPrice": number,
-      "deliveryDays": number,
-      "warrantyMonths": number,
-      "scores": {
-        "priceScore": number,
-        "deliveryScore": number,
-        "warrantyScore": number
-      },
-      "totalScore": number,
-      "summary": "short explanation"
+      "name": "Item name",
+      "quantity": number,
+      "specifications": "Technical specifications or requirements"
     }
   ],
-  "recommendation": {
-    "vendorName": "string",
-    "reason": "why this vendor is recommended"
-  },
-  "considerations": [
-    "short bullet point about duplicates, trade-offs, or remarks"
-  ]
+  "deliveryDays": number,
+  "paymentTerms": "string (e.g., 'Net 30', 'Advance payment', etc.)",
+  "warrantyMonths": number
 }
-Return JSON only, no extra text.
+
+Rules:
+- Extract all numerical values as numbers (not strings)
+- If multiple items are mentioned, create separate objects in the items array
+- If information is missing, use reasonable defaults
+- deliveryDays should be a number (convert "2 weeks" to 14, "1 month" to 30, etc.)
+- warrantyMonths should be in months (convert "1 year" to 12, "2 years" to 24, etc.)
+
+User Input: ${naturalLanguageInput}
+
+Return ONLY the JSON object, nothing else.
 `;
 
-  try {
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are a strict JSON generator. Always return exactly the JSON schema requested by the user.',
-        },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.2,
-    });
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    let text = response.text();
 
-    const raw = completion.choices[0]?.message?.content ?? '';
-    const jsonMatch = raw.match(/\{[\s\S]*\}$/);
-    const jsonString = jsonMatch ? jsonMatch[0] : raw;
+    console.log('🔍 Raw RFP AI response:', text);
 
-    const parsed = JSON.parse(jsonString);
+    text = text.trim();
+    text = text.replace(/``````/g, '').trim();
 
-    if (!Array.isArray(parsed.proposals)) {
-      throw new Error('AI response missing proposals array');
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      text = jsonMatch[0];
     }
 
-    return parsed;
-  } catch (error: any) {
-    console.error('OpenAI compare error:', error);
+    text = text.trim();
+
+    console.log('🔍 Cleaned RFP text:', text);
+
+    const rfpData = JSON.parse(text);
+
+    if (!rfpData.title || rfpData.budget == null || !rfpData.items) {
+      throw new Error('Missing required RFP fields');
+    }
+
+    console.log('✅ AI RFP extraction successful');
+    return rfpData;
+  } catch (error) {
+    console.error('Error extracting RFP from text:', error);
+    throw new Error('Failed to extract RFP data from natural language');
+  }
+};
+
+// ---------------- Proposal extraction with Gemini ----------------
+
+export const extractProposalFromEmail = async (
+  emailBody: string,
+  vendorEmail: string,
+  subject: string
+): Promise<any> => {
+  try {
+    const prompt = `
+You are an AI assistant that extracts structured proposal data from vendor email responses.
+
+Extract the following information from the vendor's email and return ONLY valid JSON (no markdown, no extra text):
+
+{
+  "vendorEmail": "${vendorEmail}",
+  "totalPrice": number,
+  "deliveryDays": number,
+  "warrantyMonths": number,
+  "notes": "string (any additional notes or terms from vendor)"
+}
+
+Rules:
+- Extract the total price (convert to number, remove currency symbols like $, ₹, etc.)
+- Extract delivery timeline in days (convert weeks/months to days)
+- Extract warranty period in months (convert years to months)
+- Include any important additional notes or special terms
+- If information is missing, use null for that field
+- IMPORTANT: Return ONLY the JSON object. No markdown, no code blocks, no backticks.
+
+Email Subject: ${subject}
+
+Email Body:
+${emailBody}
+
+JSON output:
+`;
+
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    let text = response.text();
+
+    console.log('🔍 Raw proposal AI response:', text);
+
+    text = text.trim();
+    text = text.replace(/``````/g, '').trim();
+
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      text = jsonMatch[0];
+    }
+
+    text = text.trim();
+
+    console.log('🔍 Cleaned proposal text:', text);
+
+    const proposalData = JSON.parse(text);
+
+    console.log('✅ AI proposal extraction successful');
+    return proposalData;
+  } catch (error) {
+    console.error('Error extracting proposal from email:', error);
+    throw new Error('Failed to extract proposal data from email');
+  }
+};
+
+// ---------------- PURE MATH comparison (no Gemini) ----------------
+
+export const compareProposals = async (
+  rfp: any,
+  proposalsInput: any[]
+): Promise<any> => {
+  try {
+    console.log('📊 Starting pure math comparison...');
+
+    const proposals = Array.isArray(proposalsInput)
+      ? proposalsInput
+      : [proposalsInput];
+
+    if (!proposals.length) {
+      throw new Error('No proposals to compare');
+    }
+
+    const scores = proposals.map((p: any) => {
+      const vendorName = p.vendor?.name || p.vendorEmail || 'Unknown Vendor';
+      const price = Number(p.totalPrice) || 0;
+      const delivery = Number(p.deliveryDays) || 0;
+      const warranty = Number(p.warrantyMonths) || 0;
+
+      // Price: lower is better, relative to budget if available
+      const priceScore =
+        price > 0 && rfp.budget > 0
+          ? Math.min(100, Math.round((rfp.budget / price) * 100))
+          : price > 0
+          ? Math.min(100, Math.round((100000 / price)))
+          : 0;
+
+      // Delivery: meeting or beating required days gives high score
+      const deliveryScore =
+        delivery > 0 && rfp.deliveryDays > 0
+          ? Math.min(100, Math.round((rfp.deliveryDays / delivery) * 100))
+          : delivery > 0
+          ? Math.max(0, 100 - delivery * 2)
+          : 0;
+
+      // Warranty: meeting/exceeding required months gives high score
+      const warrantyScore =
+        warranty > 0 && rfp.warrantyMonths > 0
+          ? Math.min(100, Math.round((warranty / rfp.warrantyMonths) * 100))
+          : warranty > 0
+          ? Math.min(100, warranty * 5)
+          : 0;
+
+      const totalScore = Math.round(
+        (priceScore + deliveryScore + warrantyScore) / 3
+      );
+
+      return {
+        vendorName,
+        priceScore,
+        deliveryScore,
+        warrantyScore,
+        totalScore,
+        price,
+        delivery,
+        warranty,
+      };
+    });
+
+    const best = scores.reduce((a, b) =>
+      a.totalScore > b.totalScore ? a : b
+    );
+
+    const avgPrice =
+      proposals.reduce((sum, p) => sum + (Number(p.totalPrice) || 0), 0) /
+      proposals.length;
+    const minPrice = Math.min(
+      ...proposals.map((p) => Number(p.totalPrice) || Infinity)
+    );
+    const maxWarranty = Math.max(
+      ...proposals.map((p) => Number(p.warrantyMonths) || 0)
+    );
+
+    const considerations: string[] = [];
+
+    if (best.price < avgPrice) {
+      considerations.push(
+        `${best.vendorName} offers below‑average pricing ($${best.price} vs avg $${Math.round(
+          avgPrice
+        )})`
+      );
+    }
+
+    if (best.delivery && rfp.deliveryDays && best.delivery <= rfp.deliveryDays) {
+      considerations.push(
+        `${best.vendorName} meets or beats required delivery timeline`
+      );
+    }
+
+    if (
+      best.warranty &&
+      rfp.warrantyMonths &&
+      best.warranty >= rfp.warrantyMonths
+    ) {
+      considerations.push(
+        `${best.vendorName} meets or exceeds warranty requirements`
+      );
+    }
+
+    const cheapestVendor = scores.find((s) => s.price === minPrice);
+    if (cheapestVendor && cheapestVendor.vendorName !== best.vendorName) {
+      considerations.push(
+        `${cheapestVendor.vendorName} has the lowest price ($${minPrice}) but a lower overall score`
+      );
+    }
+
+    const longestWarrantyVendor = scores.find(
+      (s) => s.warranty === maxWarranty
+    );
+    if (
+      longestWarrantyVendor &&
+      longestWarrantyVendor.vendorName !== best.vendorName
+    ) {
+      considerations.push(
+        `${longestWarrantyVendor.vendorName} offers the longest warranty (${maxWarranty} months)`
+      );
+    }
+
+    console.log('✅ Math comparison complete');
+
+    return {
+      summary: `Analyzed ${proposals.length} proposal(s) using mathematical scoring based on price, delivery, and warranty. ${best.vendorName} achieved the highest overall score.`,
+      scores: scores.map((s) => ({
+        vendorName: s.vendorName,
+        priceScore: s.priceScore,
+        deliveryScore: s.deliveryScore,
+        warrantyScore: s.warrantyScore,
+        totalScore: s.totalScore,
+      })),
+      recommendation: {
+        bestVendor: best.vendorName,
+        reason: `${best.vendorName} scored highest (${best.totalScore}/100) with strong price (${best.priceScore}/100), delivery (${best.deliveryScore}/100), and warranty (${best.warrantyScore}/100).`,
+      },
+      considerations:
+        considerations.length > 0
+          ? considerations
+          : ['All proposals scored purely with math, no external AI.'],
+    };
+  } catch (error) {
+    console.error('Error in math comparison:', error);
     throw new Error('Failed to compare proposals');
   }
 };
